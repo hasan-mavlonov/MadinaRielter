@@ -19,6 +19,7 @@ class AnnouncementForm(StatesGroup):
     floor = State()
     condition = State()
     additional_features = State()
+    area = State()
     price = State()
     contact = State()
     phone_number = State()
@@ -65,38 +66,28 @@ def jkh_buttons():
 
 
 def rooms_buttons():
-    # Create all number buttons first
     buttons = [
         InlineKeyboardButton(text=str(i), callback_data=str(i))
         for i in range(1, 12)
     ]
-
-    # Split into chunks of 4 buttons per row
     keyboard = []
     for i in range(0, len(buttons), 4):
         row = buttons[i:i + 4]
         keyboard.append(row)
-
-    # Add manual input button as a separate row
     keyboard.append([InlineKeyboardButton(text="↩️ Ввести вручную", callback_data="custom_rooms")])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
 def floor_buttons(total_floors):
-    # Create buttons for each floor
     floor_buttons = [
         InlineKeyboardButton(text=str(i), callback_data=str(i))
         for i in range(1, int(total_floors) + 1)
     ]
-
-    # Split into rows of 4 buttons each
     rows = []
     for i in range(0, len(floor_buttons), 4):
         row = floor_buttons[i:i + 4]
         rows.append(row)
-
-    # Add manual input button as a separate row
     rows.append([InlineKeyboardButton(text="↩️ Ввести вручную", callback_data="custom_floor")])
-
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -114,29 +105,18 @@ def condition_buttons():
 
 
 ESSENTIAL_FEATURES = {
-    # Construction
     "new_building": "Новостройка",
     "secondary": "Вторичное жилье",
-
-    # Key amenities
     "wardrobe": "Гардеробная",
     "balcony": "Балкон",
     "loggia": "Лоджия",
-
-    # Technical
     "heating": "Отопление",
     "gas": "Газ",
     "water_supply": "Водоснабжение",
-
-    # Security
     "security": "Охрана",
     "intercom": "Домофон",
-
-    # Outdoor
     "parking": "Парковка",
     "garage": "Гараж",
-
-    # Comfort
     "air_conditioning": "Кондиционер",
     "wifi": "Wi-Fi",
 }
@@ -149,21 +129,14 @@ def get_feature_buttons(selected_features=None, custom_features=None):
         custom_features = []
 
     builder = InlineKeyboardBuilder()
-
-    # Add essential features
     for feature_id, feature_text in ESSENTIAL_FEATURES.items():
         text = f"✅ {feature_text}" if feature_id in selected_features else feature_text
         builder.button(text=text, callback_data=feature_id)
-
-    # Add custom features
     for feature in custom_features:
         builder.button(text=f"✅ {feature}", callback_data=f"custom_{feature}")
-
-    # Add action buttons
     builder.button(text="✏️ Добавить свою", callback_data="add_custom")
     builder.button(text="✔️ Готово", callback_data="done")
-
-    builder.adjust(2)  # 2 buttons per row
+    builder.adjust(2)
     return builder.as_markup()
 
 
@@ -202,7 +175,6 @@ async def process_location_type(callback: types.CallbackQuery, state: FSMContext
             reply_markup=region_buttons()
         )
         await state.set_state(AnnouncementForm.region)
-
     await callback.answer()
 
 
@@ -344,33 +316,26 @@ async def process_features(callback: types.CallbackQuery, state: FSMContext):
         if not selected and not custom:
             await callback.answer("Выберите хотя бы одну особенность", show_alert=True)
             return
-
-        await callback.message.edit_text("Укажите цену (например: 345.000 y.e./торг на месте):")
-        await state.set_state(AnnouncementForm.price)
-
+        await callback.message.edit_text("Укажите общую площадь (в м²):")
+        await state.set_state(AnnouncementForm.area)
     elif callback.data == "add_custom":
         await callback.message.edit_text("Введите свою особенность:")
         await state.set_state(AnnouncementForm.custom_feature_input)
-
     elif callback.data.startswith("custom_"):
-        # Toggle custom feature
-        feature = callback.data[7:]  # Remove "custom_" prefix
+        feature = callback.data[7:]
         if feature in custom:
             custom.remove(feature)
         else:
             custom.append(feature)
         await state.update_data(custom_features=custom)
         await show_feature_selection(callback.message, selected, custom)
-
     else:
-        # Toggle essential feature
         if callback.data in selected:
             selected.remove(callback.data)
         else:
             selected.append(callback.data)
         await state.update_data(additional_features=selected)
         await show_feature_selection(callback.message, selected, custom)
-
     await callback.answer()
 
 
@@ -378,12 +343,9 @@ async def process_features(callback: types.CallbackQuery, state: FSMContext):
 async def process_custom_feature(message: Message, state: FSMContext):
     data = await state.get_data()
     custom = data.get('custom_features', [])
-
     if message.text.strip():
         custom.append(message.text.strip())
         await state.update_data(custom_features=custom)
-
-    # Return to feature selection
     data = await state.get_data()
     await message.answer(
         "Какие дополнительные особенности есть?",
@@ -396,102 +358,36 @@ async def process_custom_feature(message: Message, state: FSMContext):
 
 
 async def show_feature_selection(message: Message, selected: list, custom: list):
-    # Group features into categories
     features_by_category = {
         "Строительство и материалы": [
-            ("electricity", "Электрика есть"),
-            ("plastered_walls", "Стены заштукатурены"),
-            ("poured_floor", "Пол залит"),
-            ("brick_walls", "Кирпичные стены"),
-            ("monolithic", "Монолитное строительство"),
-            ("panel", "Панельный дом"),
             ("new_building", "Новостройка"),
             ("secondary", "Вторичное жилье"),
         ],
         "Помещения": [
             ("wardrobe", "Гардеробная"),
-            ("storage", "Кладовая"),
             ("balcony", "Балкон"),
             ("loggia", "Лоджия"),
-            ("terrace", "Терраса"),
-            ("veranda", "Веранда"),
-            ("attic", "Мансарда"),
-            ("basement", "Подвал"),
-        ],
-        "Кухня": [
-            ("kitchen_furniture", "Кухонная мебель"),
-            ("kitchen_appliances", "Встроенная техника"),
-            ("bar_counter", "Барная стойка"),
-            ("kitchen_island", "Островная кухня"),
-        ],
-        "Санузел": [
-            ("jacuzzi", "Джакузи"),
-            ("sauna", "Сауна"),
-            ("steam_room", "Парная"),
-            ("separate_toilet", "Раздельный санузел"),
-            ("bathroom_renovation", "Санузел с ремонтом"),
         ],
         "Технические особенности": [
             ("heating", "Отопление"),
             ("gas", "Газ"),
-            ("central_heating", "Центральное отопление"),
-            ("individual_heating", "Индивидуальное отопление"),
             ("water_supply", "Водоснабжение"),
-            ("sewage", "Канализация"),
-            ("ventilation", "Вентиляция"),
-            ("fireplace", "Камин"),
-            ("smart_home", "Умный дом"),
         ],
         "Безопасность": [
             ("security", "Охрана"),
-            ("concierge", "Консьерж"),
-            ("cctv", "Видеонаблюдение"),
-            ("alarm", "Сигнализация"),
             ("intercom", "Домофон"),
         ],
         "Территория": [
-            ("pool", "Бассейн"),
             ("parking", "Парковка"),
-            ("underground_parking", "Подземная парковка"),
             ("garage", "Гараж"),
-            ("garden", "Сад"),
-            ("playground", "Детская площадка"),
-            ("barbecue", "Зона барбекю"),
-            ("fountain", "Фонтан"),
-        ],
-        "Инфраструктура": [
-            ("elevator", "Лифт"),
-            ("freight_elevator", "Грузовой лифт"),
-            ("ramp", "Пандус"),
-            ("gym", "Тренажерный зал"),
-            ("spa", "СПА-зона"),
-            ("laundry", "Прачечная"),
-            ("conference_room", "Конференц-зал"),
         ],
         "Дополнительные удобства": [
             ("air_conditioning", "Кондиционер"),
             ("wifi", "Wi-Fi"),
-            ("cable_tv", "Кабельное ТВ"),
-            ("soundproofing", "Шумоизоляция"),
-            ("view", "Вид из окна"),
-            ("panoramic_windows", "Панорамные окна"),
-            ("fire_exit", "Пожарный выход"),
-        ],
-        "Специальные особенности": [
-            ("designer_renovation", "Дизайнерский ремонт"),
-            ("euro_renovation", "Евроремонт"),
-            ("fresh_renovation", "Свежий ремонт"),
-            ("historical", "Историческая ценность"),
-            ("waterfront", "Водоем рядом"),
-            ("green_zone", "Зеленая зона"),
-            ("quiet_courtyard", "Тихий двор"),
         ]
     }
 
-    # Create inline keyboard with categorized features
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
-
-    # Add categorized features
     for category, features in features_by_category.items():
         row_buttons = []
         for feature_id, feature_name in features:
@@ -500,13 +396,12 @@ async def show_feature_selection(message: Message, selected: list, custom: list)
                 text=f"{emoji} {feature_name}",
                 callback_data=feature_id
             ))
-            if len(row_buttons) == 2:  # 2 buttons per row
+            if len(row_buttons) == 2:
                 keyboard.inline_keyboard.append(row_buttons)
                 row_buttons = []
-        if row_buttons:  # Add remaining buttons if any
+        if row_buttons:
             keyboard.inline_keyboard.append(row_buttons)
 
-    # Add custom features if any
     if custom:
         keyboard.inline_keyboard.append([InlineKeyboardButton(
             text="══════ Ваши особенности ══════",
@@ -525,7 +420,6 @@ async def show_feature_selection(message: Message, selected: list, custom: list)
         if row_buttons:
             keyboard.inline_keyboard.append(row_buttons)
 
-    # Add action buttons
     keyboard.inline_keyboard.extend([
         [InlineKeyboardButton(text="➕ Добавить свою особенность", callback_data="add_custom")],
         [InlineKeyboardButton(text="✅ Готово", callback_data="done")]
@@ -537,12 +431,21 @@ async def show_feature_selection(message: Message, selected: list, custom: list)
     )
 
 
+@router.message(AnnouncementForm.area)
+async def process_area(message: Message, state: FSMContext):
+    if message.text.isdigit():
+        await state.update_data(area=message.text)
+        await message.answer("Укажите цену (например: 345.000 y.e./торг на месте):")
+        await state.set_state(AnnouncementForm.price)
+    else:
+        await message.answer("Пожалуйста, введите число")
+
+
 @router.message(AnnouncementForm.price)
 async def process_price(message: Message, state: FSMContext):
     await state.update_data(price=message.text)
     data = await state.get_data()
 
-    # Generate announcement with fixed contact info
     property_type = {
         "apartment": "квартира",
         "house": "дом",
@@ -557,19 +460,17 @@ async def process_price(message: Message, state: FSMContext):
         jkh_map = {
             "nrg_oybek": "ЖК NRG Oybek",
             "kamron_palace": "ЖК Kamron Palace",
-            "central_park": "ЖК Central Park",
-            "other_jkh": "ЖК"
+            "central_park": "ЖК Central Park"
         }
-        location = jkh_map.get(data['jkh_name'], "ЖК")
+        location = jkh_map.get(data['jkh_name'], data['jkh_name'])
     else:
         region_map = {
             "chilanzar": "Чиланзарский район",
             "yunusabad": "Юнусабадский район",
             "mirabad": "Мирабадский район",
-            "shaykhontokhur": "Шайхантахурский район",
-            "other_region": "другой район"
+            "shaykhontokhur": "Шайхантахурский район"
         }
-        location = region_map.get(data.get('region', ''), "")
+        location = region_map.get(data.get('region', ''), data.get('region', ''))
 
     condition_map = {
         "euro_lux": "Евролюкс",
@@ -579,98 +480,31 @@ async def process_price(message: Message, state: FSMContext):
         "rough": "Черновая отделка",
         "pre_finish": "Предчистовая отделка"
     }
-    condition = condition_map.get(data['condition'], "")
+    condition = condition_map.get(data['condition'], data.get('condition', ''))
 
     feature_map = {
-        # Construction and materials
-        "electricity": "Электрика есть",
-        "plastered_walls": "Стены заштукатурены",
-        "poured_floor": "Пол залит",
-        "brick_walls": "Кирпичные стены",
-        "monolithic": "Монолитное строительство",
-        "panel": "Панельный дом",
         "new_building": "Новостройка",
         "secondary": "Вторичное жилье",
-
-        # Rooms and spaces
         "wardrobe": "Гардеробная",
-        "storage": "Кладовая",
         "balcony": "Балкон",
         "loggia": "Лоджия",
-        "terrace": "Терраса",
-        "veranda": "Веранда",
-        "attic": "Мансарда",
-        "basement": "Подвал",
-
-        # Kitchen features
-        "kitchen_furniture": "Кухонная мебель",
-        "kitchen_appliances": "Встроенная техника",
-        "bar_counter": "Барная стойка",
-        "kitchen_island": "Островная кухня",
-
-        # Bathroom features
-        "jacuzzi": "Джакузи",
-        "sauna": "Сауна",
-        "steam_room": "Парная",
-        "separate_toilet": "Раздельный санузел",
-        "bathroom_renovation": "Санузел с ремонтом",
-
-        # Technical features
         "heating": "Отопление",
         "gas": "Газ",
-        "central_heating": "Центральное отопление",
-        "individual_heating": "Индивидуальное отопление",
         "water_supply": "Водоснабжение",
-        "sewage": "Канализация",
-        "ventilation": "Вентиляция",
-        "fireplace": "Камин",
-        "smart_home": "Умный дом",
-
-        # Security
         "security": "Охрана",
-        "concierge": "Консьерж",
-        "cctv": "Видеонаблюдение",
-        "alarm": "Сигнализация",
         "intercom": "Домофон",
-
-        # Outdoor amenities
-        "pool": "Бассейн",
         "parking": "Парковка",
-        "underground_parking": "Подземная парковка",
         "garage": "Гараж",
-        "garden": "Сад",
-        "playground": "Детская площадка",
-        "barbecue": "Зона барбекю",
-        "fountain": "Фонтан",
-
-        # Infrastructure
-        "elevator": "Лифт",
-        "freight_elevator": "Грузовой лифт",
-        "ramp": "Пандус",
-        "gym": "Тренажерный зал",
-        "spa": "СПА-зона",
-        "laundry": "Прачечная",
-        "conference_room": "Конференц-зал",
-
-        # Additional comforts
         "air_conditioning": "Кондиционер",
-        "wifi": "Wi-Fi",
-        "cable_tv": "Кабельное ТВ",
-        "soundproofing": "Шумоизоляция",
-        "view": "Вид из окна",
-        "panoramic_windows": "Панорамные окна",
-        "fire_exit": "Пожарный выход",
-
-        # Special features
-        "designer_renovation": "Дизайнерский ремонт",
-        "euro_renovation": "Евроремонт",
-        "fresh_renovation": "Свежий ремонт",
-        "historical": "Историческая ценность",
-        "waterfront": "Водоем рядом",
-        "green_zone": "Зеленая зона",
-        "quiet_courtyard": "Тихий двор"
+        "wifi": "Wi-Fi"
     }
-    features = "\n".join([feature_map.get(f, "") for f in data['additional_features']])
+
+    features = []
+    for feature in data.get('additional_features', []):
+        if feature in feature_map:
+            features.append(feature_map[feature])
+    features.extend(data.get('custom_features', []))
+    features_text = "\n".join(features) if features else "Нет дополнительных особенностей"
 
     announcement = (
         f"<b><i>Продаётся {room_text} {property_type} в {location}</i></b>\n\n"
@@ -678,11 +512,11 @@ async def process_price(message: Message, state: FSMContext):
         f"Комнат: {rooms}\n"
         f"Этаж: {data['floor']}\n"
         f"Этажность: {data['total_floors']}\n"
-        f"Общая площадь: (укажите площадь) м²\n\n"
+        f"Общая площадь: {data['area']} м²\n\n"
         f"Состояние: {condition}\n"
-        f"{features}\n\n"
+        f"Особенности:\n{features_text}\n\n"
         f"Цена: {data['price']}\n\n"
-        f"+998909946644 Улугбек\n"
+        f"+998909946644 Улугбек\n\n"
         f"t.me/akhulugbek"
     )
 
